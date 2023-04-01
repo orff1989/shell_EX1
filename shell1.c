@@ -8,7 +8,48 @@
 #include <string.h>
 
 #define MAX_COMMANDS 10
+#define MAX_VARIABLES 100
+
 char promptText[1024]="hello:";
+char* history[20];
+int history_index = 0;
+
+
+typedef struct {
+    char* name;
+    char* value;
+} variable;
+
+variable variables[MAX_VARIABLES];
+int num_variables = 0;
+
+void set_variable(char* name, char* value) {
+    int i;
+    for (i = 0; i < num_variables; i++) {
+        if (strcmp(variables[i].name, name) == 0) {
+            free(variables[i].value);
+            variables[i].value = strdup(value);
+            return;
+        }
+    }
+    if (num_variables < MAX_VARIABLES) {
+        variables[num_variables].name = strdup(name);
+        variables[num_variables].value = strdup(value);
+        num_variables++;
+    } else {
+        printf("Error: maximum number of variables reached\n");
+    }
+}
+
+char* get_variable(char* name) {
+    int i;
+    for (i = 0; i < num_variables; i++) {
+        if (strcmp(variables[i].name, name) == 0) {
+            return variables[i].value;
+        }
+    }
+    return NULL;
+}
 
 void handle_sigint(int sig) {
     if (sig == SIGINT) {
@@ -16,6 +57,21 @@ void handle_sigint(int sig) {
         fflush(stdout); // flush stdout to make sure the message gets printed immediately
     }
 }
+
+void add_to_history(char* command) {
+    // free the oldest command in history if the array is full
+    if (history_index == 20) {
+        free(history[0]);
+        for (int i = 0; i < 20 - 1; i++) {
+            history[i] = history[i+1];
+        }
+        history_index--;
+    }
+    // add the current command to history
+    history[history_index] = strdup(command);
+    history_index++;
+}
+
 
 int main() {
     char command[1024];
@@ -27,6 +83,7 @@ int main() {
     char **argv[MAX_COMMANDS];
     int argc[MAX_COMMANDS];
     int num_commands;
+
 
     // register the signal handler for SIGINT (Ctrl+C)
     signal(SIGINT, handle_sigint);
@@ -42,6 +99,28 @@ int main() {
         fgets(command, 1024, stdin);
         command[strlen(command) - 1] = '\0';
 
+        if (!strcmp(command, "!!")) {
+            if (history_index == 0) {
+                printf("No commands in history.\n");
+                continue;
+            }
+        strcpy(command,history[history_index - 1]);
+        } else if (command[0] == '$') {
+            token = strtok(command + 1," = ");
+            if (token != NULL) {
+                char* name = token;
+                token = strtok(NULL," = ");
+                if (token != NULL) {
+                    char* value = token;
+                    set_variable(name,value);
+                    continue;
+                }
+            }
+        }
+        else {
+            // otherwise, add the current command to history and return it
+            add_to_history(command);
+        }
         /* parse command line */
         i = 0;
         num_commands = 0;
@@ -102,13 +181,21 @@ int main() {
         if (! strcmp(argv[num_commands-1][0], "prompt") && ! strcmp(argv[num_commands-1][1], "=")) {
             strcpy(promptText, argv[num_commands-1][2]);
             continue;
-        }
-        else if (! strcmp(argv[num_commands-1][0], "echo")) {
+        }else if (! strcmp(argv[num_commands-1][0], "echo")) {
             if(! strcmp(argv[num_commands-1][1], "$?")) printf("%d\n",status);
             else {
                 int j = 1;
                 while (argv[num_commands-1][j]) {
-                    printf("%s ", argv[num_commands-1][j]);
+                    if (argv[num_commands-1][j][0] == '$') {
+                        char* value = get_variable(argv[num_commands-1][j] + 1);
+                        if (value != NULL) {
+                            printf("%s ", value);
+                        } else {
+                            printf("%s ", argv[num_commands-1][j]);
+                        }
+                    } else {
+                        printf("%s ", argv[num_commands-1][j]);
+                    }
                     j++;
                 }
                 printf("\n");
