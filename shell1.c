@@ -78,188 +78,224 @@ int main() {
     char *token;
     int i;
     char *outfile;
-    int fd, amper, redirect, retid, status, redirect_out=0 , redirect_err=0, append=0 ;
+    int fd, amper, redirect, retid, status, redirect_out = 0, redirect_err = 0, append = 0, flag=1;
     int fildes[2];
-    char **argv[MAX_COMMANDS];
+    char **argv[MAX_COMMANDS], c;
     int argc[MAX_COMMANDS];
     int num_commands;
-
 
     // register the signal handler for SIGINT (Ctrl+C)
     signal(SIGINT, handle_sigint);
 
-    for (i=0; i<MAX_COMMANDS; i++) {
-        argv[i] = malloc(sizeof(char*) * 10);
+    for (i = 0; i < MAX_COMMANDS; i++) {
+        argv[i] = malloc(sizeof(char *) * 10);
         argc[i] = 10;
     }
-
-    while (1)
-    {
-        printf("%s ", promptText);
-        fgets(command, 1024, stdin);
-        command[strlen(command) - 1] = '\0';
-
-        if (!strcmp(command, "!!")) {
-            if (history_index == 0) {
-                printf("No commands in history.\n");
-                continue;
+    int history_pos = history_index;
+    int n = 0;
+    printf("%s ", promptText);
+    while ((c = getchar()) != EOF) {
+        if (c == '\033') {
+            printf("\033[1A");//line up
+            printf("\x1b[2K");//delete line
+            getchar(); // skip the [
+            switch (getchar()) { // the real value
+                case 'A':
+                    // code for arrow up
+                    if (history_pos > 0) {
+                        history_pos--;
+                        printf("%s %s",promptText, history[history_pos]);
+                        strcpy(command, history[history_pos]);
+                        flag=0;
+                        n=strlen(command);
+                    }
+                    break;
+                case 'B':
+                    // code for arrow down
+                    if (history_pos < history_index - 1) {
+                        history_pos++;
+                        printf("%s %s",promptText, history[history_pos]);
+                        strcpy(command, history[history_pos]);
+                        flag=0;
+                        n=strlen(command);
+                    }
+                    break;
             }
-        strcpy(command,history[history_index - 1]);
-        } else if (command[0] == '$') {
-            token = strtok(command + 1," = ");
-            if (token != NULL) {
-                char* name = token;
-                token = strtok(NULL," = ");
-                if (token != NULL) {
-                    char* value = token;
-                    set_variable(name,value);
+        }else if(flag==0){
+            flag=1;
+            continue;
+        }else if (flag && c == '\n') {
+            command[n] = '\0';
+            if (!strcmp(command, "!!")) {
+                if (history_index == 0) {
+                    printf("No commands in history.\n");
                     continue;
                 }
-            }
-        }
-        else {
-            // otherwise, add the current command to history and return it
-            add_to_history(command);
-        }
-        /* parse command line */
-        i = 0;
-        num_commands = 0;
-        token = strtok (command," ");
-        while (token != NULL)
-        {
-            if (strcmp(token, "|") == 0) {
-                argv[num_commands][i] = NULL;
-                num_commands++;
-                i = 0;
-            } else {
-                if (i >= argc[num_commands]) {
-                    argc[num_commands] *= 2;
-                    argv[num_commands] = realloc(argv[num_commands], sizeof(char*) * argc[num_commands]);
-                }
-                argv[num_commands][i] = token;
-                i++;
-            }
-            token = strtok (NULL, " ");
-        }
-        argv[num_commands][i] = NULL;
-        num_commands++;
-
-        /* Is command empty */
-        if (argv[0][0] == NULL)
-            continue;
-
-        /* Does command line end with & */
-        if (! strcmp(argv[num_commands-1][i - 1], "&")) {
-            amper = 1;
-            argv[num_commands-1][i - 1] = NULL;
-        }
-        else
-            amper = 0;
-
-        redirect_out = 0;
-        redirect_err = 0;
-        append = 0;
-
-        if (i > 1 && ! strcmp(argv[num_commands-1][i - 2], ">")) {
-            redirect_out = 1;
-            argv[num_commands-1][i - 2] = NULL;
-            outfile = argv[num_commands-1][i - 1];
-        }else if (i > 1 && ! strcmp(argv[num_commands-1][i - 2], ">>")) {
-            redirect_out = 1;
-            append = 1;
-            argv[num_commands-1][i - 2] = NULL;
-            outfile = argv[num_commands-1][i - 1];
-        } else if (i > 1 && ! strcmp(argv[num_commands-1][i - 2], "2>")) {
-            redirect_err = 1;
-            argv[num_commands-1][i - 2] = NULL;
-            outfile = argv[num_commands-1][i - 1];
-        }
-
-
-
-        /* for commands not part of the shell command language */
-        if (! strcmp(argv[num_commands-1][0], "prompt") && ! strcmp(argv[num_commands-1][1], "=")) {
-            strcpy(promptText, argv[num_commands-1][2]);
-            continue;
-        }else if (! strcmp(argv[num_commands-1][0], "echo")) {
-            if(! strcmp(argv[num_commands-1][1], "$?")) printf("%d\n",status);
-            else {
-                int j = 1;
-                while (argv[num_commands-1][j]) {
-                    if (argv[num_commands-1][j][0] == '$') {
-                        char* value = get_variable(argv[num_commands-1][j] + 1);
-                        if (value != NULL) {
-                            printf("%s ", value);
-                        } else {
-                            printf("%s ", argv[num_commands-1][j]);
-                        }
-                    } else {
-                        printf("%s ", argv[num_commands-1][j]);
+                strcpy(command, history[history_index - 1]);
+            } else if (command[0] == '$') {
+                token = strtok(command + 1, " = ");
+                if (token != NULL) {
+                    char *name = token;
+                    token = strtok(NULL, " = ");
+                    if (token != NULL) {
+                        char *value = token;
+                        set_variable(name, value);
+                        continue;
                     }
-                    j++;
                 }
-                printf("\n");
+            } else {
+                // otherwise, add the current command to history and return it
+                add_to_history(command);
             }
-            continue;
-        }
-        else if (!strcmp(argv[num_commands-1][0], "cd")) {
-            if (chdir(argv[num_commands-1][1]) != 0) {
-                perror("cd error");
-            }
-            continue;
-        }
-        else if (!strcmp(argv[num_commands-1][0], "quit")) {
-            break;
-        }
-
-        if (fork() == 0) {
-            /* redirection of IO ? */
-            if (redirect_out) {
-                if (append) {
-                    fd = open(outfile, O_WRONLY | O_CREAT | O_APPEND, 0660);
+            /* parse command line */
+            i = 0;
+            num_commands = 0;
+            token = strtok(command, " ");
+            while (token != NULL) {
+                if (strcmp(token, "|") == 0) {
+                    argv[num_commands][i] = NULL;
+                    num_commands++;
+                    i = 0;
                 } else {
-                    fd = creat(outfile, 0660);
+                    if (i >= argc[num_commands]) {
+                        argc[num_commands] *= 2;
+                        argv[num_commands] = realloc(argv[num_commands], sizeof(char *) * argc[num_commands]);
+                    }
+                    argv[num_commands][i] = token;
+                    i++;
                 }
-                close(STDOUT_FILENO);
-                dup(fd);
-                close(fd);
-                /* stdout is now redirected */
-            } else if (redirect_err) {
-                fd = creat(outfile, 0660);
-                close(STDERR_FILENO);
-                dup(fd);
-                close(fd);
-                /* stderr is now redirected */
+                token = strtok(NULL, " ");
+            }
+            argv[num_commands][i] = NULL;
+            num_commands++;
+
+            /* Is command empty */
+            if (argv[0][0] == NULL)
+                continue;
+
+            /* Does command line end with & */
+            if (!strcmp(argv[num_commands - 1][i - 1], "&")) {
+                amper = 1;
+                argv[num_commands - 1][i - 1] = NULL;
+            } else
+                amper = 0;
+
+            redirect_out = 0;
+            redirect_err = 0;
+            append = 0;
+
+            if (i > 1 && !strcmp(argv[num_commands - 1][i - 2], ">")) {
+                redirect_out = 1;
+                argv[num_commands - 1][i - 2] = NULL;
+                outfile = argv[num_commands - 1][i - 1];
+            } else if (i > 1 && !strcmp(argv[num_commands - 1][i - 2], ">>")) {
+                redirect_out = 1;
+                append = 1;
+                argv[num_commands - 1][i - 2] = NULL;
+                outfile = argv[num_commands - 1][i - 1];
+            } else if (i > 1 && !strcmp(argv[num_commands - 1][i - 2], "2>")) {
+                redirect_err = 1;
+                argv[num_commands - 1][i - 2] = NULL;
+                outfile = argv[num_commands - 1][i - 1];
             }
 
-            for (i=0; i<num_commands-1; i++) {
-                pipe(fildes);
-                if (fork() == 0) {
+
+
+            /* for commands not part of the shell command language */
+            if (!strcmp(argv[num_commands - 1][0], "prompt") && !strcmp(argv[num_commands - 1][1], "=")) {
+                strcpy(promptText, argv[num_commands - 1][2]);
+                continue;
+            } else if (!strcmp(argv[num_commands - 1][0], "echo")) {
+                if (!strcmp(argv[num_commands - 1][1], "$?")) printf("%d\n", status);
+                else {
+                    int j = 1;
+                    while (argv[num_commands - 1][j]) {
+                        if (argv[num_commands - 1][j][0] == '$') {
+                            char *value = get_variable(argv[num_commands - 1][j] + 1);
+                            if (value != NULL) {
+                                printf("%s ", value);
+                            } else {
+                                printf("%s ", argv[num_commands - 1][j]);
+                            }
+                        } else {
+                            printf("%s ", argv[num_commands - 1][j]);
+                        }
+                        j++;
+                    }
+                    printf("\n");
+                }
+                continue;
+            } else if (!strcmp(argv[num_commands - 1][0], "cd")) {
+                if (chdir(argv[num_commands - 1][1]) != 0) {
+                    perror("cd error");
+                }
+                continue;
+            } else if (!strcmp(argv[num_commands - 1][0], "read")) {
+                char value[1024];
+                fgets(value, 1024, stdin);
+                value[strlen(value) - 1] = '\0';
+                set_variable(argv[num_commands - 1][1], value);
+                continue;
+            } else if (!strcmp(argv[num_commands - 1][0], "quit")) {
+                break;
+            }
+
+            if (fork() == 0) {
+                /* redirection of IO ? */
+                if (redirect_out) {
+                    if (append) {
+                        fd = open(outfile, O_WRONLY | O_CREAT | O_APPEND, 0660);
+                    } else {
+                        fd = creat(outfile, 0660);
+                    }
                     close(STDOUT_FILENO);
-                    dup(fildes[1]);
-                    close(fildes[1]);
-                    close(fildes[0]);
-                    execvp(argv[i][0], argv[i]);
-                    exit(0);
-                } else {
-                    close(STDIN_FILENO);
-                    dup(fildes[0]);
-                    close(fildes[0]);
-                    close(fildes[1]);
+                    dup(fd);
+                    close(fd);
+                    /* stdout is now redirected */
+                } else if (redirect_err) {
+                    fd = creat(outfile, 0660);
+                    close(STDERR_FILENO);
+                    dup(fd);
+                    close(fd);
+                    /* stderr is now redirected */
                 }
+
+                for (i = 0; i < num_commands - 1; i++) {
+                    pipe(fildes);
+                    if (fork() == 0) {
+                        close(STDOUT_FILENO);
+                        dup(fildes[1]);
+                        close(fildes[1]);
+                        close(fildes[0]);
+                        execvp(argv[i][0], argv[i]);
+                        exit(0);
+                    } else {
+                        close(STDIN_FILENO);
+                        dup(fildes[0]);
+                        close(fildes[0]);
+                        close(fildes[1]);
+                    }
+                }
+
+                execvp(argv[i][0], argv[i]);
+                exit(0);
             }
 
-            execvp(argv[i][0], argv[i]);
-            exit(0);
+            /* parent continues over here... */
+            /* waits for child to exit if required */
+            if (amper == 0)
+                retid = wait(&status);
+
+            n = 0;
+            history_pos = history_index;
+            printf("%s ", promptText);
+        } else {
+            command[n++] = c;
         }
-
-        /* parent continues over here... */
-        /* waits for child to exit if required */
-        if (amper == 0)
-            retid = wait(&status);
     }
-
-    for (i=0; i<MAX_COMMANDS; i++) {
+    for (i = 0; i < MAX_COMMANDS; i++) {
         free(argv[i]);
     }
 }
+
+
