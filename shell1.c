@@ -130,6 +130,7 @@ void execute_command(char* command) {
     redirect_out = 0;
     redirect_err = 0;
     append = 0;
+
     if (i > 1 && !strcmp(argv[num_commands - 1][i - 2], ">")) {
         redirect_out = 1;
         argv[num_commands - 1][i - 2] = NULL;
@@ -137,6 +138,10 @@ void execute_command(char* command) {
     } else if (i > 1 && !strcmp(argv[num_commands - 1][i - 2], ">>")) {
         redirect_out = 1;
         append = 1;
+        argv[num_commands - 1][i - 2] = NULL;
+        outfile = argv[num_commands - 1][i - 1];
+    } else if (i > 1 && !strcmp(argv[num_commands - 1][i - 2], "2>")) {
+        redirect_err = 1;
         argv[num_commands - 1][i - 2] = NULL;
         outfile = argv[num_commands - 1][i - 1];
     }
@@ -349,8 +354,29 @@ int main() {
             flag = 1;
             continue;
         } else if (!if_else_flag && flag && c == '\n') {
+            char* token;
             command[n] = '\0';
-            add_to_history(command);
+            if (!strcmp(command, "!!")) {
+                if (history_index == 0) {
+                    printf("No commands in history.\n");
+                    continue;
+                }
+                strcpy(command, history[history_index - 1]);
+            } else if (command[0] == '$') {
+                token = strtok(command + 1, " = ");
+                if (token != NULL) {
+                    char *name = token;
+                    token = strtok(NULL, " = ");
+                    if (token != NULL) {
+                        char *value = token;
+                        set_variable(name, value);
+                        continue;
+                    }
+                }
+            } else {
+                // otherwise, add the current command to history and return it
+                add_to_history(command);
+            }
             execute_command(command);
             n = 0;
             history_pos = history_index;
